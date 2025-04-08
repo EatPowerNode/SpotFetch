@@ -1,0 +1,14 @@
+{
+    "manifest_version": 3,
+    "name": "Precious Metals Spot Price Fetch",
+    "version": "1.0",
+    "description": "Insert live gold and silver spot prices via crypto tokens.",
+    "permissions": ["contextMenus", "activeTab", "scripting", "storage"],
+    "background": {
+      "service_worker": "background.js"
+    },
+    "icons": {
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  }
