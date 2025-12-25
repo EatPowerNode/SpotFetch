@@ -1,9 +1,16 @@
-// CoinGecko API endpoints for PAXG (gold) and KAG (silver)
-const COINGECKO_API = "https://api.coingecko.com/api/v3/simple/price?ids=pax-gold,kinesis-silver&vs_currencies=usd";
+// Cross-browser API polyfill
+const browserAPI = typeof browser !== 'undefined' ? browser : chrome;
+const storage = browserAPI.storage.local;
+const contextMenus = browserAPI.contextMenus;
+const scripting = browserAPI.scripting;
+
+// CoinGecko API endpoints for PAXG (gold), KAG (silver), and GRAMP (platinum)
+const COINGECKO_API = "https://api.coingecko.com/api/v3/simple/price?ids=pax-gold,kinesis-silver,gram-platinum&vs_currencies=usd";
 
 // Store current prices
 let goldPrice = "Loading...";
 let silverPrice = "Loading...";
+let platinumPrice = "Loading...";
 
 // Fetch prices every 5 minutes
 function fetchSpotPrices() {
@@ -12,19 +19,22 @@ function fetchSpotPrices() {
     .then(response => response.json())
     .then(data => {
       // Get previous prices from storage
-      chrome.storage.local.get(["previousGoldPrice", "previousSilverPrice"], storedData => {
+      storage.get(["previousGoldPrice", "previousSilverPrice", "previousPlatinumPrice"], storedData => {
         const previousGoldPrice = storedData.previousGoldPrice || null;
         const previousSilverPrice = storedData.previousSilverPrice || null;
+        const previousPlatinumPrice = storedData.previousPlatinumPrice || null;
 
-        console.log("Retrieved previous prices:", { previousGoldPrice, previousSilverPrice });
+        console.log("Retrieved previous prices:", { previousGoldPrice, previousSilverPrice, previousPlatinumPrice });
 
         // Update current prices
         goldPrice = data["pax-gold"].usd.toFixed(2);
         silverPrice = data["kinesis-silver"].usd.toFixed(2);
+        platinumPrice = data["gram-platinum"].usd.toFixed(2);
 
         // Log the prices for debugging
         console.log("Current Gold Price:", goldPrice, "Previous Gold Price:", previousGoldPrice);
         console.log("Current Silver Price:", silverPrice, "Previous Silver Price:", previousSilverPrice);
+        console.log("Current Platinum Price:", platinumPrice, "Previous Platinum Price:", previousPlatinumPrice);
 
         // Determine price direction
         let goldDirection = "";
@@ -53,37 +63,60 @@ function fetchSpotPrices() {
           }
         }
 
+        let platinumDirection = "";
+        if (previousPlatinumPrice && previousPlatinumPrice !== "Loading..." && previousPlatinumPrice !== "Error") {
+          const currentPlatinum = parseFloat(platinumPrice);
+          const prevPlatinum = parseFloat(previousPlatinumPrice);
+          if (currentPlatinum > prevPlatinum) {
+            platinumDirection = "up";
+          } else if (currentPlatinum < prevPlatinum) {
+            platinumDirection = "down";
+          } else {
+            platinumDirection = "unc";
+          }
+        }
+
         // Log the directions for debugging
         console.log("Gold Direction:", goldDirection);
         console.log("Silver Direction:", silverDirection);
+        console.log("Platinum Direction:", platinumDirection);
 
         // Store the current prices as previous for the next fetch
         const newData = {
           goldPrice,
           silverPrice,
+          platinumPrice,
           goldDirection,
           silverDirection,
+          platinumDirection,
           previousGoldPrice: goldPrice,
-          previousSilverPrice: silverPrice
+          previousSilverPrice: silverPrice,
+          previousPlatinumPrice: platinumPrice
         };
         console.log("Storing new data:", newData);
-        chrome.storage.local.set(newData);
+        storage.set(newData);
       });
     })
     .catch(error => {
       console.error("Error fetching prices:", error);
       goldPrice = "Error";
       silverPrice = "Error";
+      platinumPrice = "Error";
       const errorData = {
         goldPrice,
         silverPrice,
+        platinumPrice,
         goldDirection: "",
         silverDirection: "",
+        platinumDirection: "",
         previousGoldPrice: goldPrice,
-        previousSilverPrice: silverPrice
+        previousSilverPrice: silverPrice,
+        previousPlatinumPrice: platinumPrice
       };
       console.log("Storing error data:", errorData);
-      chrome.storage.local.set(errorData);
+      storage.set(errorData);
+      // Retry after 30 seconds
+      setTimeout(fetchSpotPrices, 30000);
     });
 }
 
@@ -125,32 +158,38 @@ function getTimezoneAbbreviation() {
 // Function to create context menu items
 function createContextMenus() {
   // Remove all existing context menu items to avoid duplicates
-  chrome.contextMenus.removeAll(() => {
+  contextMenus.removeAll(() => {
     // Create new context menu items
-    chrome.contextMenus.create({
+    contextMenus.create({
       id: "insert-gold",
       title: "Insert Gold Spot Price (PAXG)",
       contexts: ["editable"]
     });
 
-    chrome.contextMenus.create({
+    contextMenus.create({
       id: "insert-silver",
       title: "Insert Silver Spot Price (KAG)",
+      contexts: ["editable"]
+    });
+
+    contextMenus.create({
+      id: "insert-platinum",
+      title: "Insert Platinum Spot Price (GRAMP)",
       contexts: ["editable"]
     });
   });
 }
 
-// Create context menus on startup or installation
-chrome.runtime.onStartup.addListener(() => {
-  console.log("Extension started, creating context menus and fetching prices...");
+// Create context menus and initial fetch on installation
+browserAPI.runtime.onInstalled.addListener(() => {
+  console.log("Extension installed, creating context menus and fetching prices...");
   createContextMenus();
   fetchSpotPrices();
 });
 
-chrome.runtime.onInstalled.addListener(() => {
-  console.log("Extension installed, creating context menus and fetching prices...");
-  createContextMenus();
+// Fetch on browser startup (for non-persistent backgrounds in Firefox)
+browserAPI.runtime.onStartup.addListener(() => {
+  console.log("Extension started, fetching prices...");
   fetchSpotPrices();
 });
 
@@ -159,19 +198,21 @@ setInterval(fetchSpotPrices, 5 * 60 * 1000);
 
 // Handle menu item clicks with a debounce mechanism
 let isInserting = false;
-chrome.contextMenus.onClicked.addListener((info, tab) => {
+contextMenus.onClicked.addListener((info, tab) => {
   if (isInserting) {
     console.log("Insert operation already in progress, skipping...");
     return;
   }
 
   isInserting = true;
-  chrome.storage.local.get(["goldPrice", "silverPrice", "goldDirection", "silverDirection"], data => {
+  storage.get(["goldPrice", "silverPrice", "platinumPrice", "goldDirection", "silverDirection", "platinumDirection"], data => {
     console.log("Stored Data on Click:", data); // Log stored data for debugging
     const isGold = info.menuItemId === "insert-gold";
-    const price = isGold ? data.goldPrice : data.silverPrice;
-    const direction = isGold ? data.goldDirection : data.silverDirection;
-    const label = isGold ? "Gold" : "Silver";
+    const isSilver = info.menuItemId === "insert-silver";
+    const isPlatinum = info.menuItemId === "insert-platinum";
+    const price = isGold ? data.goldPrice : isPlatinum ? data.platinumPrice : data.silverPrice;
+    const direction = isGold ? data.goldDirection : isPlatinum ? data.platinumDirection : data.silverDirection;
+    const label = isGold ? "Gold" : isPlatinum ? "Platinum" : "Silver";
 
     // Get the current local date and time
     const now = new Date();
@@ -188,11 +229,16 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     const formattedText = `[${label}: $${price} ${direction} - ${dateTime}]`.trim();
 
     console.log("Inserting text:", formattedText);
-    chrome.scripting.executeScript({
+    scripting.executeScript({
       target: { tabId: tab.id, frameIds: [0] }, // Only run in the main frame
       func: insertPrice,
       args: [formattedText]
-    }, () => {
+    }, (results) => {
+      if (browserAPI.runtime.lastError) {
+        console.error("Execute script error:", browserAPI.runtime.lastError.message);
+      } else {
+        console.log("Execute script succeeded:", results);
+      }
       isInserting = false; // Reset the flag after the operation completes
     });
   });
@@ -220,8 +266,8 @@ function insertPrice(formattedText) {
 
   console.log("Target element after adjustment:", targetElement);
 
-  // Check if the editor is a Draft.js editor
-  const isDraftJsEditor = targetElement.closest('.DraftEditor-root') !== null;
+  // Broader check for Draft.js editor (X uses custom classes like .public-DraftEditor-content)
+  const isDraftJsEditor = targetElement.closest('.DraftEditor-root, .public-DraftEditor-content') !== null;
   console.log("Is Draft.js editor:", isDraftJsEditor);
 
   // Handle different types of editable elements
@@ -241,7 +287,7 @@ function insertPrice(formattedText) {
   } else if (targetElement.isContentEditable) {
     try {
       if (isDraftJsEditor) {
-        // For Draft.js editors (like Gab), simulate a paste event
+        // For Draft.js editors (like Gab/X), simulate a paste event
         const clipboardData = new DataTransfer();
         clipboardData.setData("text/plain", formattedText);
         const pasteEvent = new ClipboardEvent("paste", {
@@ -252,7 +298,7 @@ function insertPrice(formattedText) {
         targetElement.dispatchEvent(pasteEvent);
         console.log("Text inserted successfully into Draft.js editor using paste event.");
       } else {
-        // For other contenteditable elements (like X)
+        // For other contenteditable elements
         const beforeInputEvent = new InputEvent("beforeinput", {
           bubbles: true,
           cancelable: true,
@@ -312,6 +358,20 @@ function insertPrice(formattedText) {
     } catch (error) {
       console.error("Text insertion failed:", error);
       console.error("Failed to insert text into contenteditable element.");
+    }
+
+    // Extra fallback: Try execCommand for stubborn editors like X.com
+    if (document.execCommand) {
+      targetElement.focus(); // Ensure focus
+      const success = document.execCommand('insertText', false, formattedText);
+      console.log("execCommand insertText success:", success);
+      if (success) {
+        const inputEvent = new InputEvent("input", { bubbles: true, inputType: "insertText", data: formattedText });
+        targetElement.dispatchEvent(inputEvent);
+        console.log("Text inserted via execCommand fallback.");
+      } else {
+        console.error("execCommand insertText failed.");
+      }
     }
   } else {
     console.error("No editable element found to insert text into.");
