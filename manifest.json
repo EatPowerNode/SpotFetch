@@ -1,19 +1,25 @@
 {
   "manifest_version": 3,
   "name": "Precious Metals Spot Price Fetch",
-  "version": "1.2",
-  "description": "Insert live gold and silver spot prices via crypto tokens.",
-  "permissions": ["contextMenus", "activeTab", "scripting", "storage"],
+  "version": "1.4",
+  "description": "Insert live gold and silver spot prices via crypto tokens. Brave/Chrome/Firefox/Mullvad compatible.",
+  "permissions": [
+    "contextMenus",
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
   "host_permissions": [
-      "https://api.coingecko.com/*",
-      "*://*.x.com/*",
-      "*://*.gab.com/*"
+    "https://api.coingecko.com/*",
+    "*://*.x.com/*",
+    "*://*.gab.com/*"
   ],
   "background": {
-      "service_worker": "background.js"
+    "service_worker": "background.js",
+    "scripts": ["background.js"]
   },
   "icons": {
-      "48": "icon48.png",
-      "128": "icon128.png"
+    "48": "icon48.png",
+    "128": "icon128.png"
   }
 }
