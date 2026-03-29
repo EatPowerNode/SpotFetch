@@ -226,7 +226,7 @@ contextMenus.onClicked.addListener((info, tab) => {
     const dateTime = `${month}/${day}/${year} ${hours}:${minutes}:${seconds} ${timezone}`;
 
     // Format the output with date, time, and timezone
-    const formattedText = `[${label}: $${price} ${direction} - ${dateTime}]`.trim();
+    const formattedText = `[${label}: $${price}/ozt ${direction} - ${dateTime}]`.trim();
 
     console.log("Inserting text:", formattedText);
     scripting.executeScript({
@@ -340,3 +340,15 @@ function insertPrice(formattedText) {
     console.log("Inserted via Selection API fallback");
   }
 }
+
+/**
+ * SpotFetch Extension - Version 1.4
+ * 
+ * Features:
+ *   - Gold (PAXG), Silver (KAG), and Platinum (GRAMP) spot prices
+ *   - All prices shown in troy ounces (/ozt)
+ *   - Reliable insertion on Gab (Draft.js) and other rich text editors
+ *   - Cross-browser support (Chromium + Firefox)
+ * 
+ * Last updated: March 2026
+ */
