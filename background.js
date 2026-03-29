@@ -29,7 +29,7 @@ function fetchSpotPrices() {
         // Update current prices
         goldPrice = data["pax-gold"].usd.toFixed(2);
         silverPrice = data["kinesis-silver"].usd.toFixed(2);
-        platinumPrice = data["gram-platinum"].usd.toFixed(2);
+        platinumPrice = (data["gram-platinum"].usd * 31.10348).toFixed(2);
 
         // Log the prices for debugging
         console.log("Current Gold Price:", goldPrice, "Previous Gold Price:", previousGoldPrice);
@@ -246,14 +246,15 @@ contextMenus.onClicked.addListener((info, tab) => {
 
 // Function to inject price into the active text field
 function insertPrice(formattedText) {
-  // Log the active element for debugging
+  console.log("=== Inserting price ===", formattedText);
   console.log("Active element:", document.activeElement);
 
-  // Get the active element
   let targetElement = document.activeElement;
 
-  // If the active element is not editable, try to find a contenteditable parent
-  if (!targetElement.isContentEditable && targetElement.tagName !== "INPUT" && targetElement.tagName !== "TEXTAREA") {
+  // Walk up to find contenteditable if needed
+  if (!targetElement.isContentEditable && 
+      targetElement.tagName !== "INPUT" && 
+      targetElement.tagName !== "TEXTAREA") {
     let parent = targetElement;
     while (parent && parent !== document.body) {
       if (parent.isContentEditable) {
@@ -264,116 +265,78 @@ function insertPrice(formattedText) {
     }
   }
 
-  console.log("Target element after adjustment:", targetElement);
+  console.log("Final target element:", targetElement);
 
-  // Broader check for Draft.js editor (X uses custom classes like .public-DraftEditor-content)
-  const isDraftJsEditor = targetElement.closest('.DraftEditor-root, .public-DraftEditor-content') !== null;
-  console.log("Is Draft.js editor:", isDraftJsEditor);
-
-  // Handle different types of editable elements
+  // Standard input/textarea
   if (targetElement.tagName === "INPUT" || targetElement.tagName === "TEXTAREA") {
-    // For standard input or textarea elements
     const currentValue = targetElement.value || "";
     targetElement.value = currentValue + formattedText;
 
-    // Dispatch an input event to notify the framework
-    const inputEvent = new Event("input", { bubbles: true });
+    targetElement.dispatchEvent(new Event("input", { bubbles: true }));
+    targetElement.dispatchEvent(new Event("change", { bubbles: true }));
+    console.log("Inserted into INPUT/TEXTAREA");
+    return;
+  }
+
+  if (!targetElement.isContentEditable) {
+    console.error("No editable element found");
+    return;
+  }
+
+  targetElement.focus();
+
+  const isDraftJsEditor = targetElement.closest('.DraftEditor-root, .public-DraftEditor-content') !== null;
+  console.log("Is Draft.js editor:", isDraftJsEditor);
+
+  // === DRAFT.JS / GAB PATH (this is the one that was duplicating) ===
+  if (isDraftJsEditor) {
+    const clipboardData = new DataTransfer();
+    clipboardData.setData("text/plain", formattedText);
+
+    const pasteEvent = new ClipboardEvent("paste", {
+      clipboardData: clipboardData,
+      bubbles: true,
+      cancelable: true
+    });
+
+    targetElement.dispatchEvent(pasteEvent);
+    console.log("Inserted via Clipboard paste event (Draft.js)");
+    return;   // ← STOP HERE so nothing else runs
+  }
+
+  // === Regular contenteditable (non-Gab) ===
+  // (we can keep this for other sites, but it won't run on Gab)
+  const beforeInputEvent = new InputEvent("beforeinput", {
+    bubbles: true,
+    cancelable: true,
+    data: formattedText,
+    inputType: "insertText"
+  });
+
+  const notPrevented = targetElement.dispatchEvent(beforeInputEvent);
+  if (notPrevented) {
+    const inputEvent = new InputEvent("input", {
+      bubbles: true,
+      inputType: "insertText",
+      data: formattedText
+    });
     targetElement.dispatchEvent(inputEvent);
-
-    // Dispatch a change event for good measure
-    const changeEvent = new Event("change", { bubbles: true });
-    targetElement.dispatchEvent(changeEvent);
-    console.log("Text inserted successfully into input/textarea.");
-  } else if (targetElement.isContentEditable) {
-    try {
-      if (isDraftJsEditor) {
-        // For Draft.js editors (like Gab/X), simulate a paste event
-        const clipboardData = new DataTransfer();
-        clipboardData.setData("text/plain", formattedText);
-        const pasteEvent = new ClipboardEvent("paste", {
-          clipboardData: clipboardData,
-          bubbles: true,
-          cancelable: true
-        });
-        targetElement.dispatchEvent(pasteEvent);
-        console.log("Text inserted successfully into Draft.js editor using paste event.");
-      } else {
-        // For other contenteditable elements
-        const beforeInputEvent = new InputEvent("beforeinput", {
-          bubbles: true,
-          cancelable: true,
-          data: formattedText,
-          inputType: "insertText"
-        });
-
-        // Dispatch the beforeinput event
-        const notPrevented = targetElement.dispatchEvent(beforeInputEvent);
-        if (notPrevented) {
-          // If the event wasn't prevented, the framework should handle the insertion
-          const inputEvent = new InputEvent("input", {
-            bubbles: true,
-            inputType: "insertText",
-            data: formattedText
-          });
-          targetElement.dispatchEvent(inputEvent);
-          console.log("Text inserted successfully using beforeinput event.");
-        } else {
-          // If the beforeinput event was prevented, fall back to Selection API
-          console.log("beforeinput event was prevented, falling back to Selection API.");
-          const selection = window.getSelection();
-          if (selection.rangeCount > 0) {
-            const range = selection.getRangeAt(0);
-            range.deleteContents(); // Remove any selected text
-            const textNode = document.createTextNode(formattedText);
-            range.insertNode(textNode);
-
-            // Move the cursor after the inserted text
-            range.setStartAfter(textNode);
-            range.setEndAfter(textNode);
-            selection.removeAllRanges();
-            selection.addRange(range);
-          } else {
-            // If no selection, append to the end of the contenteditable element
-            const textNode = document.createTextNode(formattedText);
-            targetElement.appendChild(textNode);
-
-            // Move the cursor after the inserted text
-            const range = document.createRange();
-            range.setStartAfter(textNode);
-            range.setEndAfter(textNode);
-            selection.removeAllRanges();
-            selection.addRange(range);
-          }
-
-          // Dispatch an input event to notify the framework
-          const inputEvent = new InputEvent("input", {
-            bubbles: true,
-            inputType: "insertText",
-            data: formattedText
-          });
-          targetElement.dispatchEvent(inputEvent);
-          console.log("Text inserted successfully using Selection API.");
-        }
-      }
-    } catch (error) {
-      console.error("Text insertion failed:", error);
-      console.error("Failed to insert text into contenteditable element.");
-    }
-
-    // Extra fallback: Try execCommand for stubborn editors like X.com
-    if (document.execCommand) {
-      targetElement.focus(); // Ensure focus
-      const success = document.execCommand('insertText', false, formattedText);
-      console.log("execCommand insertText success:", success);
-      if (success) {
-        const inputEvent = new InputEvent("input", { bubbles: true, inputType: "insertText", data: formattedText });
-        targetElement.dispatchEvent(inputEvent);
-        console.log("Text inserted via execCommand fallback.");
-      } else {
-        console.error("execCommand insertText failed.");
-      }
-    }
+    console.log("Inserted via beforeinput + input events");
   } else {
-    console.error("No editable element found to insert text into.");
+    // Fallback for stubborn editors
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+      const textNode = document.createTextNode(formattedText);
+      range.insertNode(textNode);
+      range.setStartAfter(textNode);
+      range.setEndAfter(textNode);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    } else {
+      targetElement.appendChild(document.createTextNode(formattedText));
+    }
+    console.log("Inserted via Selection API fallback");
   }
 }

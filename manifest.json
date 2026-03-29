@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Precious Metals Spot Price Fetch",
-  "version": "1.3",
-  "description": "Insert live gold and silver spot prices via crypto tokens. Firefox/Mullvad compatible.",
+  "version": "1.4",
+  "description": "Insert live gold and silver spot prices via crypto tokens. Brave/Chrome/Firefox/Mullvad compatible.",
   "permissions": [
     "contextMenus",
     "activeTab",
@@ -15,6 +15,7 @@
     "*://*.gab.com/*"
   ],
   "background": {
+    "service_worker": "background.js",
     "scripts": ["background.js"]
   },
   "icons": {
